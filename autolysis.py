@@ -10,6 +10,7 @@
 #   "openai",
 #   "numpy",
 #   "scipy",
+#   "sklearn",
 # ]
 # ///
 
@@ -23,6 +24,8 @@ import chardet
 from pathlib import Path
 import asyncio
 import scipy.stats as stats
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 
 # Constants
 API_URL = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
@@ -73,6 +76,8 @@ async def generate_narrative(analysis, token, file_path):
         f"## Summary Statistics\n{analysis['summary']}\n\n"
         f"## Missing Values\n{analysis['missing_values']}\n\n"
         f"## Correlation Matrix\n{analysis['correlation']}\n\n"
+        "## Clustering Insights\n"
+        f"{analysis.get('clustering', 'No clustering insights generated.')}\n\n"
         "### Insights:\n"
         "- Highlight trends, outliers, anomalies, and patterns.\n"
         "- Suggest further analyses like clustering or anomaly detection.\n"
@@ -133,6 +138,17 @@ async def analyze_data(df, token):
             'p_value': p_value
         }
 
+    # Clustering insights
+    if not numeric_df.empty:
+        kmeans = KMeans(n_clusters=3, random_state=42)
+        clusters = kmeans.fit_predict(numeric_df.fillna(0))
+        df['Cluster'] = clusters
+        cluster_centers = kmeans.cluster_centers_
+        analysis['clustering'] = {
+            'cluster_centers': cluster_centers.tolist(),
+            'labels': clusters.tolist()
+        }
+
     print("Data analysis complete.")
     return analysis, suggestions
 
@@ -176,6 +192,21 @@ async def visualize_data(df, output_dir):
         file_name = output_dir / f'{column}_boxplot.png'
         plt.savefig(file_name, dpi=100)
         print(f"Saved box plot: {file_name}")
+        plt.close()
+
+    if 'Cluster' in df.columns:
+        pca = PCA(n_components=2)
+        components = pca.fit_transform(df[numeric_columns].fillna(0))
+        df['PC1'], df['PC2'] = components[:, 0], components[:, 1]
+
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(x='PC1', y='PC2', hue='Cluster', data=df, palette='viridis')
+        plt.title('Cluster Visualization (PCA Reduced)')
+        plt.xlabel('Principal Component 1')
+        plt.ylabel('Principal Component 2')
+        file_name = output_dir / 'cluster_pca.png'
+        plt.savefig(file_name, dpi=100)
+        print(f"Saved PCA cluster visualization: {file_name}")
         plt.close()
 
 async def save_narrative_with_images(narrative, output_dir):
@@ -226,22 +257,29 @@ async def main(file_path):
     output_dir = Path(file_path.stem)  # Create a directory named after the dataset
     output_dir.mkdir(exist_ok=True)
 
-    # Generate visualizations with LLM suggestions
+        # Generate visualizations with LLM suggestions
     print("Generating visualizations...")
     await visualize_data(df, output_dir)
 
     # Generate narrative
-    print("Generating narrative using LLM...")
-    narrative = await generate_narrative(analysis, token, file_path)
+    print("Generating narrative...")
+    try:
+        narrative = await generate_narrative(analysis, token, file_path)
+    except Exception as e:
+        print(f"Error generating narrative: {e}")
+        sys.exit(1)
 
-    if narrative != "Narrative generation failed due to an error.":
-        await save_narrative_with_images(narrative, output_dir)
-    else:
-        print("Narrative generation failed.")
+    # Save narrative and images
+    print("Saving narrative and images...")
+    await save_narrative_with_images(narrative, output_dir)
 
-# Execute script
+    print("Autolysis process completed successfully.")
+    print(f"Results saved in directory: {output_dir}")
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python script.py <file_path>")
+        print("Usage: python autolysis.py <file_path>")
         sys.exit(1)
-    asyncio.run(main(sys.argv[1]))
+
+    input_file = sys.argv[1]
+    asyncio.run(main(input_file))
