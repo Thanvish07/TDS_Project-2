@@ -4,6 +4,8 @@
 #   "seaborn",
 #   "pandas",
 #   "matplotlib",
+#   "httpx",
+#   "chardet",
 # ]
 # ///
 
