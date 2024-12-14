@@ -59,16 +59,15 @@ async def generate_narrative(analysis, token, file_path):
         'Content-Type': 'application/json'
     }
 
-    # Enhanced prompt to generate more detailed and specific narrative
+    # Prepare the prompt for narrative generation
     prompt = (
         f"You are a data analyst. Provide a detailed narrative based on the following data analysis results for the file '{file_path.name}':\n\n"
         f"Column Names & Types: {list(analysis['summary'].keys())}\n\n"
         f"Summary Statistics: {analysis['summary']}\n\n"
         f"Missing Values: {analysis['missing_values']}\n\n"
         f"Correlation Matrix: {analysis['correlation']}\n\n"
-        "Please provide insights into any trends, outliers, anomalies, or patterns you detect. "
-        "Also, suggest additional analyses that could provide more insights, such as clustering, anomaly detection, etc. "
-        "Describe how each observation or trend might impact future decision-making or actions."
+        "Based on this information, please provide insights into any trends, outliers, anomalies, "
+        "or patterns you can detect. Suggest additional analyses that could provide more insights, such as clustering, anomaly detection, etc."
     )
 
     data = {
@@ -84,16 +83,15 @@ async def analyze_data(df, token):
         print("Error: Dataset is empty.")
         sys.exit(1)
 
-    # Enhanced prompt for better LLM analysis suggestions
+    # Prepare the prompt to ask the LLM for analysis suggestions
     prompt = (
-        f"You are a data analyst. Given the following dataset information, provide an analysis plan and suggest useful techniques:\n\n"
+        f"You are a data analyst. Given the following dataset information, provide an analysis plan:\n\n"
         f"Columns: {list(df.columns)}\n"
         f"Data Types: {df.dtypes.to_dict()}\n"
         f"First 5 rows of data:\n{df.head()}\n\n"
-        "Please suggest useful data analysis techniques, such as correlation analysis, regression, anomaly detection, clustering, or others. "
-        "Also, consider the scale of the data and recommend ways to deal with potential challenges like missing values, categorical variables, etc."
+        "Please suggest useful data analysis techniques, such as correlation analysis, regression, anomaly detection, clustering, or others."
     )
-
+    
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
@@ -103,6 +101,7 @@ async def analyze_data(df, token):
         "messages": [{"role": "user", "content": prompt}]
     }
 
+    # Requesting analysis suggestions from the LLM
     suggestions = await async_post_request(headers, data)
     print(f"LLM Suggestions: {suggestions}")
 
