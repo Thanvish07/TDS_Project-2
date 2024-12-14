@@ -21,6 +21,7 @@ import httpx
 import chardet
 from pathlib import Path
 import asyncio
+import scipy.stats as stats
 
 # Constants
 API_URL = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
@@ -29,15 +30,14 @@ API_URL = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
 def get_token():
     try:
         return os.environ["AIPROXY_TOKEN"]
-    except KeyError:
-        print("Error: AIPROXY_TOKEN environment variable not set.")
-        sys.exit(1)
+    except KeyError as e:
+        print(f"Error: Environment variable '{e.args[0]}' not set.")
+        raise
 
 async def load_data(file_path):
     """Load CSV data with encoding detection."""
     if not os.path.isfile(file_path):
-        print(f"Error: File '{file_path}' not found.")
-        sys.exit(1)
+        raise FileNotFoundError(f"Error: File '{file_path}' not found.")
 
     with open(file_path, 'rb') as f:
         result = chardet.detect(f.read())
@@ -48,9 +48,16 @@ async def load_data(file_path):
 async def async_post_request(headers, data):
     """Async function to make HTTP requests."""
     async with httpx.AsyncClient() as client:
-        response = await client.post(API_URL, headers=headers, json=data, timeout=30.0)
-        response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
+        try:
+            response = await client.post(API_URL, headers=headers, json=data, timeout=30.0)
+            response.raise_for_status()
+            return response.json()['choices'][0]['message']['content']
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error occurred: {e}")
+            raise
+        except Exception as e:
+            print(f"Error during request: {e}")
+            raise
 
 async def generate_narrative(analysis, token, file_path):
     """Generate narrative using LLM."""
@@ -59,15 +66,16 @@ async def generate_narrative(analysis, token, file_path):
         'Content-Type': 'application/json'
     }
 
-    # Prepare the prompt for narrative generation
+    # Enhanced prompt to generate more detailed and specific narrative
     prompt = (
         f"You are a data analyst. Provide a detailed narrative based on the following data analysis results for the file '{file_path.name}':\n\n"
         f"Column Names & Types: {list(analysis['summary'].keys())}\n\n"
         f"Summary Statistics: {analysis['summary']}\n\n"
         f"Missing Values: {analysis['missing_values']}\n\n"
         f"Correlation Matrix: {analysis['correlation']}\n\n"
-        "Based on this information, please provide insights into any trends, outliers, anomalies, "
-        "or patterns you can detect. Suggest additional analyses that could provide more insights, such as clustering, anomaly detection, etc."
+        "Please provide insights into any trends, outliers, anomalies, or patterns you detect. "
+        "Also, suggest additional analyses that could provide more insights, such as clustering, anomaly detection, etc. "
+        "Describe how each observation or trend might impact future decision-making or actions."
     )
 
     data = {
@@ -80,18 +88,18 @@ async def generate_narrative(analysis, token, file_path):
 async def analyze_data(df, token):
     """Use LLM to suggest and perform data analysis."""
     if df.empty:
-        print("Error: Dataset is empty.")
-        sys.exit(1)
+        raise ValueError("Error: Dataset is empty.")
 
-    # Prepare the prompt to ask the LLM for analysis suggestions
+    # Enhanced prompt for better LLM analysis suggestions
     prompt = (
-        f"You are a data analyst. Given the following dataset information, provide an analysis plan:\n\n"
+        f"You are a data analyst. Given the following dataset information, provide an analysis plan and suggest useful techniques:\n\n"
         f"Columns: {list(df.columns)}\n"
         f"Data Types: {df.dtypes.to_dict()}\n"
         f"First 5 rows of data:\n{df.head()}\n\n"
-        "Please suggest useful data analysis techniques, such as correlation analysis, regression, anomaly detection, clustering, or others."
+        "Please suggest useful data analysis techniques, such as correlation analysis, regression, anomaly detection, clustering, or others. "
+        "Also, consider the scale of the data and recommend ways to deal with potential challenges like missing values, categorical variables, etc."
     )
-    
+
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
@@ -101,8 +109,11 @@ async def analyze_data(df, token):
         "messages": [{"role": "user", "content": prompt}]
     }
 
-    # Requesting analysis suggestions from the LLM
-    suggestions = await async_post_request(headers, data)
+    try:
+        suggestions = await async_post_request(headers, data)
+    except Exception as e:
+        suggestions = f"Error fetching suggestions: {e}"
+
     print(f"LLM Suggestions: {suggestions}")
 
     # Basic analysis (summary statistics, missing values, correlations)
@@ -112,6 +123,15 @@ async def analyze_data(df, token):
         'missing_values': df.isnull().sum().to_dict(),
         'correlation': numeric_df.corr().to_dict() if not numeric_df.empty else {}
     }
+
+    # Example of hypothesis testing (t-test) on a pair of columns (assuming 'A' and 'B' exist in the dataframe)
+    if 'A' in df.columns and 'B' in df.columns:
+        t_stat, p_value = stats.ttest_ind(df['A'].dropna(), df['B'].dropna())
+        analysis['hypothesis_test'] = {
+            't_stat': t_stat,
+            'p_value': p_value
+        }
+
     print("Data analysis complete.")
     return analysis, suggestions
 
@@ -126,7 +146,7 @@ async def visualize_data(df, output_dir, analysis):
     # Limit to 3 distribution plots for numeric columns
     for idx, column in enumerate(numeric_columns[:3]):
         plt.figure(figsize=(6, 6))
-        sns.histplot(df[column].dropna(), kde=True)
+        sns.histplot(df[column].dropna(), kde=True, color='skyblue')
         plt.title(f'Distribution of {column}')
         file_name = output_dir / f'{column}_distribution.png'
         plt.savefig(file_name, dpi=100)
@@ -135,7 +155,7 @@ async def visualize_data(df, output_dir, analysis):
 
     # Generate one correlation heatmap (if numeric columns exist)
     if numeric_columns.any():
-        plt.figure(figsize=(6, 6))
+        plt.figure(figsize=(8, 8))
         corr = df[numeric_columns].corr()
         sns.heatmap(corr, annot=True, cmap='coolwarm', square=True)
         plt.title('Correlation Heatmap')
@@ -164,15 +184,28 @@ async def main(file_path):
         sys.exit(1)
 
     # Load token
-    token = get_token()
+    try:
+        token = get_token()
+    except Exception as e:
+        print(e)
+        sys.exit(1)
 
     # Load dataset
-    df = await load_data(file_path)
+    try:
+        df = await load_data(file_path)
+    except FileNotFoundError as e:
+        print(e)
+        sys.exit(1)
     print("Dataset loaded successfully.")
 
     # Analyze data with LLM insights
     print("Analyzing data...")
-    analysis, suggestions = await analyze_data(df, token)
+    try:
+        analysis, suggestions = await analyze_data(df, token)
+    except ValueError as e:
+        print(e)
+        sys.exit(1)
+
     print(f"LLM Analysis Suggestions: {suggestions}")
 
     # Create output directory
@@ -198,6 +231,6 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python autolysis.py <file_path>")
         sys.exit(1)
-    
-    # Run the main function in an event loop
-    asyncio.run(main(sys.argv[1]))
+
+    file_path = sys.argv[1]
+    asyncio.run(main(file_path))
