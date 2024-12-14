@@ -6,6 +6,9 @@
 #   "matplotlib",
 #   "httpx",
 #   "chardet",
+#   "ipykernel",
+#   "openai",
+#   "numpy",
 # ]
 # ///
 
