@@ -9,6 +9,7 @@
 #   "ipykernel",
 #   "openai",
 #   "numpy",
+#   "scipy",
 # ]
 # ///
 
