@@ -10,7 +10,6 @@
 #   "openai",
 #   "numpy",
 #   "scipy",
-#   "scikit-learn",
 # ]
 # ///
 
@@ -70,14 +69,13 @@ async def generate_narrative(analysis, token, file_path):
 
     prompt = (
         f"You are a data analyst. Provide a detailed narrative based on the following data analysis results for the file '{file_path.name}':\n\n"
-        f"## Column Names & Types\n{list(analysis['summary'].keys())}\n\n"
-        f"## Summary Statistics\n{analysis['summary']}\n\n"
-        f"## Missing Values\n{analysis['missing_values']}\n\n"
-        f"## Correlation Matrix\n{analysis['correlation']}\n\n"
-        "### Insights:\n"
-        "- Highlight trends, outliers, anomalies, and patterns.\n"
-        "- Suggest further analyses like clustering or anomaly detection.\n"
-        "- Discuss how these trends may impact future decisions."
+        f"Column Names & Types: {list(analysis['summary'].keys())}\n\n"
+        f"Summary Statistics: {analysis['summary']}\n\n"
+        f"Missing Values: {analysis['missing_values']}\n\n"
+        f"Correlation Matrix: {analysis['correlation']}\n\n"
+        "Please provide insights into trends, outliers, anomalies, or patterns. "
+        "Suggest further analyses like clustering or anomaly detection. "
+        "Discuss how these trends may impact future decisions."
     )
 
     data = {
@@ -142,16 +140,17 @@ async def visualize_data(df, output_dir):
     sns.set(style="whitegrid")
     numeric_columns = df.select_dtypes(include=['number']).columns
 
+    # Select main columns for distribution based on importance
+    selected_columns = numeric_columns[:3] if len(numeric_columns) >= 3 else numeric_columns
+
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Enhanced visualizations (distribution plots, scatter plots, box plots, heatmap)
-    for column in numeric_columns[:3]:
+    # Enhanced visualizations (distribution plots, heatmap)
+    for column in selected_columns:
         plt.figure(figsize=(6, 6))
         sns.histplot(df[column].dropna(), kde=True, color='skyblue')
         plt.title(f'Distribution of {column}')
-        plt.xlabel(column)
-        plt.ylabel('Frequency')
         file_name = output_dir / f'{column}_distribution.png'
         plt.savefig(file_name, dpi=100)
         print(f"Saved distribution plot: {file_name}")
@@ -160,23 +159,11 @@ async def visualize_data(df, output_dir):
     if len(numeric_columns) > 1:
         plt.figure(figsize=(8, 8))
         corr = df[numeric_columns].corr()
-        sns.heatmap(corr, annot=True, cmap='coolwarm', square=True, cbar=True)
+        sns.heatmap(corr, annot=True, cmap='coolwarm', square=True)
         plt.title('Correlation Heatmap')
-        plt.xlabel('Features')
-        plt.ylabel('Features')
         file_name = output_dir / 'correlation_heatmap.png'
         plt.savefig(file_name, dpi=100)
         print(f"Saved correlation heatmap: {file_name}")
-        plt.close()
-
-    for column in numeric_columns[:3]:
-        plt.figure(figsize=(6, 6))
-        sns.boxplot(x=df[column], color='lightblue')
-        plt.title(f'Box Plot of {column}')
-        plt.xlabel(column)
-        file_name = output_dir / f'{column}_boxplot.png'
-        plt.savefig(file_name, dpi=100)
-        print(f"Saved box plot: {file_name}")
         plt.close()
 
 async def save_narrative_with_images(narrative, output_dir):
