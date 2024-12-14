@@ -67,16 +67,15 @@ async def generate_narrative(analysis, token, file_path):
         'Content-Type': 'application/json'
     }
 
-    # Enhanced prompt to generate more detailed and specific narrative
     prompt = (
         f"You are a data analyst. Provide a detailed narrative based on the following data analysis results for the file '{file_path.name}':\n\n"
         f"Column Names & Types: {list(analysis['summary'].keys())}\n\n"
         f"Summary Statistics: {analysis['summary']}\n\n"
         f"Missing Values: {analysis['missing_values']}\n\n"
         f"Correlation Matrix: {analysis['correlation']}\n\n"
-        "Please provide insights into any trends, outliers, anomalies, or patterns you detect. "
-        "Also, suggest additional analyses that could provide more insights, such as clustering, anomaly detection, etc. "
-        "Describe how each observation or trend might impact future decision-making or actions."
+        "Please provide insights into trends, outliers, anomalies, or patterns. "
+        "Suggest further analyses like clustering or anomaly detection. "
+        "Discuss how these trends may impact future decisions."
     )
 
     data = {
@@ -97,8 +96,8 @@ async def analyze_data(df, token):
         f"Columns: {list(df.columns)}\n"
         f"Data Types: {df.dtypes.to_dict()}\n"
         f"First 5 rows of data:\n{df.head()}\n\n"
-        "Please suggest useful data analysis techniques, such as correlation analysis, regression, anomaly detection, clustering, or others. "
-        "Also, consider the scale of the data and recommend ways to deal with potential challenges like missing values, categorical variables, etc."
+        "Suggest data analysis techniques, such as correlation, regression, anomaly detection, clustering, or others. "
+        "Consider missing values, categorical variables, and scalability."
     )
 
     headers = {
@@ -125,7 +124,7 @@ async def analyze_data(df, token):
         'correlation': numeric_df.corr().to_dict() if not numeric_df.empty else {}
     }
 
-    # Example of hypothesis testing (t-test) on a pair of columns (assuming 'A' and 'B' exist in the dataframe)
+    # Hypothesis testing example (if 'A' and 'B' columns exist)
     if 'A' in df.columns and 'B' in df.columns:
         t_stat, p_value = stats.ttest_ind(df['A'].dropna(), df['B'].dropna())
         analysis['hypothesis_test'] = {
@@ -136,16 +135,19 @@ async def analyze_data(df, token):
     print("Data analysis complete.")
     return analysis, suggestions
 
-async def visualize_data(df, output_dir, analysis):
+async def visualize_data(df, output_dir):
     """Generate and save visualizations."""
     sns.set(style="whitegrid")
     numeric_columns = df.select_dtypes(include=['number']).columns
 
+    # Select main columns for distribution based on importance
+    selected_columns = numeric_columns[:3] if len(numeric_columns) >= 3 else numeric_columns
+
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Limit to 3 distribution plots for numeric columns
-    for idx, column in enumerate(numeric_columns[:3]):
+    # Enhanced visualizations (distribution plots, heatmap)
+    for column in selected_columns:
         plt.figure(figsize=(6, 6))
         sns.histplot(df[column].dropna(), kde=True, color='skyblue')
         plt.title(f'Distribution of {column}')
@@ -154,8 +156,7 @@ async def visualize_data(df, output_dir, analysis):
         print(f"Saved distribution plot: {file_name}")
         plt.close()
 
-    # Generate one correlation heatmap (if numeric columns exist)
-    if numeric_columns.any():
+    if len(numeric_columns) > 1:
         plt.figure(figsize=(8, 8))
         corr = df[numeric_columns].corr()
         sns.heatmap(corr, annot=True, cmap='coolwarm', square=True)
@@ -215,7 +216,7 @@ async def main(file_path):
 
     # Generate visualizations with LLM suggestions
     print("Generating visualizations...")
-    await visualize_data(df, output_dir, analysis)
+    await visualize_data(df, output_dir)
 
     # Generate narrative
     print("Generating narrative using LLM...")
@@ -224,14 +225,11 @@ async def main(file_path):
     if narrative != "Narrative generation failed due to an error.":
         await save_narrative_with_images(narrative, output_dir)
     else:
-        print("Narrative generation failed. Skipping README creation.")
+        print("Narrative generation failed.")
 
-    print("Autolysis process completed.")
-
+# Execute script
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python autolysis.py <file_path>")
+        print("Usage: python script.py <file_path>")
         sys.exit(1)
-
-    file_path = sys.argv[1]
-    asyncio.run(main(file_path))
+    asyncio.run(main(sys.argv[1]))
