@@ -123,14 +123,8 @@ async def visualize_data(df, output_dir, analysis):
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Counter for distribution plots
-    distribution_count = 0
-
-    # Distribution plots (limit to 3)
-    for column in numeric_columns:
-        if distribution_count >= 3:  # Stop after 3 plots
-            break
-        
+    # Limit to 3 distribution plots for numeric columns
+    for idx, column in enumerate(numeric_columns[:3]):
         plt.figure(figsize=(6, 6))
         sns.histplot(df[column].dropna(), kde=True)
         plt.title(f'Distribution of {column}')
@@ -138,11 +132,9 @@ async def visualize_data(df, output_dir, analysis):
         plt.savefig(file_name, dpi=100)
         print(f"Saved distribution plot: {file_name}")
         plt.close()
-        
-        distribution_count += 1
 
-    # Correlation heatmap (always generate)
-    if not numeric_columns.empty:
+    # Generate one correlation heatmap (if numeric columns exist)
+    if numeric_columns.any():
         plt.figure(figsize=(6, 6))
         corr = df[numeric_columns].corr()
         sns.heatmap(corr, annot=True, cmap='coolwarm', square=True)
